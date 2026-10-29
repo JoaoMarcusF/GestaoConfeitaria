@@ -2,16 +2,6 @@
 
 Controle financeiro da confeitaria no celular e no computador, com os mesmos dados nos dois.
 
-- **Notas**: QR code do cupom (câmera ou foto), link do QR, chave de acesso (sem QR), XML da NF-e,
-  lançamento manual e importação da planilha de controle (aba *Notas_Consolidadas*).
-- **Resumo**: painel no estilo da aba *Análise Resumo*, com gastos por mês (toque num mês para filtrar),
-  indicadores, fornecedores, formas de pagamento, categorias, "Principais descobertas" e insumos que subiram de preço.
-- **Receitas**: ficha técnica com ingredientes vindos das notas, preço tabelado por kg/L/unidade,
-  mão de obra e margem (cada uma aditiva em R$ ou multiplicativa em %).
-- **Vendas**: faturamento, para calcular lucro, margem e custo de insumos sobre as vendas.
-- **Excel**: no formato da planilha atual, com gráficos e tabela dinâmica.
-- **Sincronização**: vários celulares e o computador no mesmo Wi-Fi, com código de verificação e aparelhos lembrados.
-
 ## Baixar e instalar (pelo GitHub)
 
 A cada envio para a branch `main`, o GitHub compila tudo sozinho (aba **Actions**) e publica em
@@ -21,36 +11,6 @@ A cada envio para a branch `main`, o GitHub compila tudo sozinho (aba **Actions*
   (o Android pede para permitir a instalação pelo navegador na primeira vez).
 - `GestaoConfeitaria-Computador.zip`: descompacte e abra `Abrir no Windows.bat` (precisa do Java 17+).
 
-Para as atualizações instalarem por cima da versão anterior, configure uma vez a chave de assinatura
-em *Settings > Secrets and variables > Actions*: `ASSINATURA_BASE64` e `ASSINATURA_SENHA`.
-O arquivo da chave (`.jks`) nunca deve ir para o repositório — o `.gitignore` já impede.
-
-## Como usar no computador
-
-Precisa do Java 17 ou mais novo ([adoptium.net](https://adoptium.net)).
-
-1. Dê dois cliques em `GestaoConfeitaria.jar` (ou em `Abrir no Windows.bat`).
-2. Uma janelinha confirma que o app está aberto e a tela abre no navegador (endereço `http://127.0.0.1:47821`).
-   A tela só é acessível no próprio computador.
-3. Os dados ficam na pasta `GestaoConfeitaria` dentro da sua pasta de usuário.
-4. Na primeira vez, o Windows pode perguntar sobre o firewall: permita em **redes privadas**, para o celular encontrar o computador.
-
-Para gerar um instalador que não precisa de Java instalado (no Windows, com o JDK 17+):
-
-```
-jpackage --input . --main-jar GestaoConfeitaria.jar --name "Gestao Confeitaria" --type exe --win-shortcut --win-menu
-```
-
-Para compilar o computador a partir do código: `./gradlew :desktop:jarCompleto` → `desktop/build/libs/GestaoConfeitaria.jar`.
-No VS Code há tarefas prontas em *Terminal > Executar Tarefa…* (pasta `.vscode`).
-
-## Como compilar o app Android
-
-1. Abra a pasta `GestaoConfeitaria` no Android Studio (Ladybug ou mais novo) e aguarde o Gradle.
-2. Escolha o módulo **app** e clique em **Run**, ou gere o APK em *Build > Build APK(s)*
-   (`./gradlew :app:assembleRelease` → `app/build/outputs/apk/release/`).
-
-Requisitos: Android 8.0+ com Google Play Services (o leitor de QR é o do Google, sem pedir permissão de câmera).
 
 ## Primeiros passos
 
