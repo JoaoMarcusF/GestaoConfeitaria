@@ -19,7 +19,8 @@ A cada envio para a branch `main`, o GitHub compila tudo sozinho (aba **Actions*
 
 - `GestaoConfeitaria.apk`: abra o link no navegador do celular, baixe e instale
   (o Android pede para permitir a instalação pelo navegador na primeira vez).
-- `GestaoConfeitaria-Computador.zip`: descompacte e abra `Abrir no Windows.bat` (precisa do Java 17+).
+- `GestaoConfeitaria-Windows.zip`: descompacte e abra `GestaoConfeitaria.exe` — já traz o Java, não precisa instalar nada.
+- `GestaoConfeitaria-Computador-Java.zip`: para Mac/Linux ou quem já tem Java 17+ (`Abrir no Windows.bat` / `abrir.sh`).
 
 Para as atualizações instalarem por cima da versão anterior, configure uma vez a chave de assinatura
 em *Settings > Secrets and variables > Actions*: `ASSINATURA_BASE64` e `ASSINATURA_SENHA`.
