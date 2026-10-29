@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fatia de bolo sobre um gráfico de barras -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF" android:pathData="M34,70h40v4H34z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M37,58h6v12h-6zM47,50h6v20h-6zM57,62h6v8h-6z" />
+    <path android:fillColor="#F8E6EE" android:pathData="M60,40l14,8v14H60z" />
+    <path android:fillColor="#B83D6E" android:pathData="M60,40l14,8l-3,1.6l-11,-6.3z" />
+    <path android:fillColor="#B83D6E" android:pathData="M60,54h14v2.5H60z" />
+    <path android:fillColor="#B83D6E" android:pathData="M66,34m-2.5,0a2.5,2.5 0,1 1,5 0a2.5,2.5 0,1 1,-5 0" />
+</vector>

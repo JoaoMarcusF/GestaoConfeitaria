@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="verde">#0F766E</color>
+    <color name="fundo">#F5F8F7</color>
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/verde</item>
+        <item name="android:colorAccent">@color/verde</item>
+        <item name="android:windowBackground">@color/fundo</item>
+        <item name="android:statusBarColor">@color/fundo</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- O celular conversa com o computador pela rede local em http (o conteúdo vai cifrado com AES-GCM
+     pelo próprio app) e alguns QR codes antigos da SEFAZ usam http. Por isso o tráfego http é permitido. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

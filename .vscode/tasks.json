@@ -1,0 +1,60 @@
+{
+  // Terminal > Executar Tarefa... (ou Ctrl+Shift+B para a tarefa padrão)
+  "version": "2.0.0",
+  "options": { "cwd": "${workspaceFolder}" },
+  "windows": { "options": { "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] } } },
+  "tasks": [
+    {
+      "label": "Android: instalar no celular (USB)",
+      "type": "shell",
+      "command": "./gradlew",
+      "windows": { "command": ".\\gradlew.bat" },
+      "args": [":app:installDebug"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: gerar APK de teste (debug)",
+      "type": "shell",
+      "command": "./gradlew",
+      "windows": { "command": ".\\gradlew.bat" },
+      "args": [":app:assembleDebug"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: gerar APK final (release)",
+      "type": "shell",
+      "command": "./gradlew",
+      "windows": { "command": ".\\gradlew.bat" },
+      "args": [":app:assembleRelease"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Computador: gerar .jar",
+      "type": "shell",
+      "command": "./gradlew",
+      "windows": { "command": ".\\gradlew.bat" },
+      "args": [":desktop:jarCompleto"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Computador: abrir o app",
+      "type": "shell",
+      "command": "./gradlew",
+      "windows": { "command": ".\\gradlew.bat" },
+      "args": [":desktop:run"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Limpar builds",
+      "type": "shell",
+      "command": "./gradlew",
+      "windows": { "command": ".\\gradlew.bat" },
+      "args": ["clean"],
+      "problemMatcher": []
+    }
+  ]
+}
