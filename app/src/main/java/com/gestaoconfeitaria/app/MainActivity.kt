@@ -53,6 +53,7 @@ import java.util.concurrent.Executors
  * e a lógica (banco, receitas, painel, Excel, sincronização) vem do módulo :core.
  * Aqui ficam só as partes que precisam do celular: câmera/QR, WebView da SEFAZ, arquivos.
  */
+@SuppressLint("SetJavaScriptEnabled")   // JavaScript é necessário na interface e nas páginas lidas (SEFAZ e sites de preço)
 class MainActivity : ComponentActivity() {
 
     private lateinit var api: Api
@@ -168,7 +169,6 @@ class MainActivity : ComponentActivity() {
 
     private var idRender = 0
     private var renderCriado = false
-    @SuppressLint("SetJavaScriptEnabled")
     private val webRender: WebView by lazy {
         renderCriado = true
         WebView(this).apply {
