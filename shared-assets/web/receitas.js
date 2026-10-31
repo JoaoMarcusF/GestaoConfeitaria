@@ -5,7 +5,8 @@ const UNIDADES_RECEITA = ['g', 'kg', 'mg', 'ml', 'l', 'un', 'dz', 'xícara', 'co
 const NOME_BASE = { g: 'gramas (g)', ml: 'mililitros (ml)', un: 'unidades' };
 const abas = atual => `<div class="segmento" style="margin-bottom:14px">
   <button class="${atual === 'r' ? 'on' : ''}" data-acao="ir" data-para="receitas">Receitas</button>
-  <button class="${atual === 'i' ? 'on' : ''}" data-acao="ir" data-para="insumos">Insumos e preços</button></div>`;
+  <button class="${atual === 'i' ? 'on' : ''}" data-acao="ir" data-para="insumos">Insumos e preços</button>
+  <button class="${atual === 'g' ? 'on' : ''}" data-acao="ir" data-para="indiretos">Gastos indiretos</button></div>`;
 
 /* ---------------- lista de receitas ---------------- */
 TELAS.receitas = () => {
@@ -33,19 +34,20 @@ TELAS.receita = r => {
   if (r.id !== 'nova' && !existente) return '<div class="vazio">Receita não encontrada.</div>';
   if (!S.receita || S.receita._rota !== r.id) {
     S.receita = existente ? JSON.parse(JSON.stringify(existente)) : {
-      nome: '', rendimento: 1, rendimentoUnidade: 'unidades', ingredientes: [],
+      nome: '', rendimento: 1, rendimentoUnidade: 'unidades', ingredientes: [], indiretos: [],
       maoDeObra: { modo: 'aditivo', valor: 0 }, margem: { modo: 'multiplicativo', valor: 100 } };
     delete S.receita.calculo;
+    if (!S.receita.indiretos) S.receita.indiretos = [];
     S.receita._rota = r.id;
-    S.receitaPasso = existente ? 0 : 1;   // 0 = tudo visível (edição); 1..3 = assistente de nova receita
+    S.receitaPasso = existente ? 0 : 1;   // 0 = tudo visível (edição); 1..4 = assistente de nova receita
   }
   const R = S.receita, passo = S.receitaPasso;
   const ver = n => passo === 0 || passo >= n;
   return `
   <div class="cabeca"><div><h1>${existente ? esc(existente.nome) : 'Nova receita'}</h1>
-    <p class="sec">${passo ? 'Monte a receita em três etapas.' : 'Altere o que precisar; o custo é recalculado na hora.'}</p></div>
+    <p class="sec">${passo ? 'Monte a receita em quatro etapas.' : 'Altere o que precisar; o custo é recalculado na hora.'}</p></div>
     <div class="acoes">${existente ? `<button class="btn perigo" data-acao="excluirReceita">Excluir</button>` : ''}</div></div>
-  ${passo ? `<div class="passos">${['Receita', 'Ingredientes', 'Mão de obra e margem'].map((t, i) =>
+  ${passo ? `<div class="passos">${['Receita', 'Ingredientes', 'Gastos indiretos', 'Mão de obra e margem'].map((t, i) =>
       `<button class="${passo === i + 1 ? 'on' : passo > i + 1 ? 'feito' : ''}" data-acao="passoReceita" data-p="${i + 1}" ${i + 1 > passo ? 'disabled' : ''}>${t}</button>`).join('')}</div>` : ''}
   <div class="receita-layout">
     <div>
@@ -66,9 +68,19 @@ TELAS.receita = r => {
           ${S.dados.insumos.length ? `<button class="btn" data-acao="ingDoInsumo">Insumo cadastrado</button>` : ''}
           <button class="btn lev" data-acao="ingManual">${ICONES.lapis} Com preço manual</button>
         </div>
-        ${passo === 2 ? `<div style="margin-top:14px"><button class="btn pri" data-acao="passoReceita" data-p="3">Continuar para mão de obra e margem</button></div>` : ''}
+        ${passo === 2 ? `<div style="margin-top:14px"><button class="btn pri" data-acao="passoReceita" data-p="3">Continuar para gastos indiretos</button></div>` : ''}
       </section>` : ''}
-      ${ver(3) ? `<section class="bloco" id="rAjustes">
+      ${ver(3) ? `<section class="bloco" id="rIndiretos"><header><h2>Gastos indiretos</h2><span class="sec peq" id="rIndTotal"></span></header>
+        <p class="sec" style="margin-bottom:10px">Luz, gás, água e outras contas que a receita consome. Informe um valor ou calcule pelo tempo de uso de cada equipamento.</p>
+        <div id="rInds"></div>
+        <div class="chips" style="margin-top:6px">
+          <button class="btn" data-acao="indEquip">${ICONES.relogio} Equipamento por tempo</button>
+          <button class="btn" data-acao="indManual">${ICONES.lapis} Valor manual</button>
+          ${S.dados.gastosIndiretos.length ? `<button class="btn" data-acao="indModelo">Gasto salvo</button>` : ''}
+        </div>
+        ${passo === 3 ? `<div style="margin-top:14px"><button class="btn pri" data-acao="passoReceita" data-p="4">Continuar para mão de obra e margem</button></div>` : ''}
+      </section>` : ''}
+      ${ver(4) ? `<section class="bloco" id="rAjustes">
         <h2>Mão de obra e margem de lucro</h2>
         <p class="sec" style="margin-bottom:12px">Para cada uma, escolha se soma um valor em reais (aditivo) ou aplica um percentual (multiplicativo).</p>
         ${blocoAjuste('maoDeObra', 'Mão de obra', 'Ex.: R$ 30 pelas horas de trabalho, ou 40% sobre o custo dos ingredientes.')}
@@ -76,7 +88,7 @@ TELAS.receita = r => {
       </section>` : ''}
       <div class="cabeca" style="justify-content:flex-end"><div class="acoes">
         <button class="btn" data-acao="cancelarReceita">Cancelar</button>
-        ${ver(3) ? `<button class="btn pri" data-acao="salvarReceita">${existente ? 'Salvar alterações' : 'Salvar receita'}</button>` : ''}</div></div>
+        ${ver(4) ? `<button class="btn pri" data-acao="salvarReceita">${existente ? 'Salvar alterações' : 'Salvar receita'}</button>` : ''}</div></div>
     </div>
     <aside class="bloco" id="rResumo"><p class="sec">Adicione ingredientes para ver o custo.</p></aside>
   </div>
@@ -92,7 +104,7 @@ TELAS.receita.depois = el => {
     const inp = $(`#aj_${k}`, el); if (!inp) return;
     inp.oninput = () => { R[k].valor = lerNum(inp.value) || 0; recalcular(); };
   });
-  desenharIngredientes(); recalcular();
+  desenharIngredientes(); desenharIndiretos(); recalcular();
 };
 
 function blocoAjuste(k, titulo, ajuda) {
@@ -115,7 +127,7 @@ ACOES.passoReceita = el => {
   if (p >= 2 && !S.receita.nome.trim()) return toast('Dê um nome para a receita.', true);
   if (p === 3 && !S.receita.ingredientes.length) return toast('Adicione pelo menos um ingrediente.', true);
   S.receitaPasso = Math.max(S.receitaPasso, p);
-  render().then(() => { const alvo = p === 2 ? $('#rIngs') : $('#rAjustes'); alvo && alvo.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  render().then(() => { const alvo = { 2: '#rIngs', 3: '#rIndiretos', 4: '#rAjustes' }[p]; alvo && $(alvo) && $(alvo).scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 };
 ACOES.cancelarReceita = () => { S.receita = null; ir('receitas'); };
 ACOES.salvarReceita = async () => {
@@ -139,11 +151,17 @@ const recalcular = debounce(async () => {
       const a = $(`#ingAviso${k}`); if (a) a.innerHTML = avisoIngrediente(l, k);
       const p = $(`#ingPreco${k}`); if (p) p.textContent = l.precoExib != null ? `${brl(l.precoExib)}/${l.unidadeExib}` : '';
     });
+    (c.indiretos ? c.indiretos.itens : []).forEach((l, k) => {
+      const e = $(`#indCusto${k}`); if (e) e.textContent = l.valor != null ? brl(l.valor) : '—';
+      const a = $(`#indAviso${k}`); if (a) a.innerHTML = l.aviso ? `<div class="aviso-caixa">${esc(l.aviso)}${/tarifa|botijão|consumo|potência|custo por hora/i.test(l.aviso) ? '<br><button class="btn peq" data-acao="ir" data-para="indiretos">Abrir gastos indiretos</button>' : ''}</div>` : '';
+    });
+    const tot = $('#rIndTotal'); if (tot) tot.textContent = c.gastosIndiretos > 0 ? 'Total ' + brl(c.gastosIndiretos) : '';
     const mo = S.receita.maoDeObra || {}, mg = S.receita.margem || {};
     const barra = $('#rBarra'); if (barra) { barra.hidden = !c.ingredientes.length; $('#rBarraPreco').textContent = brl(c.precoVenda); }
     box.innerHTML = `<h2>Custo e preço</h2>
       <table class="conta">
         <tr><td><span class="op"></span>Ingredientes</td><td>${brl(c.custoIngredientes)}</td></tr>
+        <tr><td><span class="op">+</span> Gastos indiretos</td><td>${brl(c.gastosIndiretos)}</td></tr>
         <tr><td><span class="op">+</span> Mão de obra ${mo.modo === 'multiplicativo' ? `(${numBR(mo.valor, 2)}%)` : ''}</td><td>${brl(c.maoDeObra)}</td></tr>
         <tr class="total"><td><span class="op">=</span> Custo total</td><td>${brl(c.custoTotal)}</td></tr>
         <tr><td><span class="op">+</span> Margem ${mg.modo === 'multiplicativo' ? `(${numBR(mg.valor, 2)}%)` : ''}</td><td>${brl(c.lucro)}</td></tr>
@@ -151,7 +169,10 @@ const recalcular = debounce(async () => {
       </table>
       <p class="sec" style="margin-top:10px">${brl(c.precoPorcao)} por ${esc(singular(c.rendimentoUnidade))} (custo ${brl(c.custoPorcao)})</p>
       <p class="sec">Margem sobre o preço: ${pct(c.margemSobrePreco)}</p>
-      ${c.completo ? '' : `<p class="aviso-caixa" style="margin-top:10px">Alguns ingredientes estão sem custo. Resolva os avisos para o preço ficar correto.</p>`}`;
+      ${c.completo ? '' : `<p class="aviso-caixa" style="margin-top:10px">Alguns itens estão sem custo. Resolva os avisos para o preço ficar correto.</p>`}
+      ${c.precoVenda > 0 ? `<h3 style="margin-top:16px">Para onde vai o preço</h3>${Graficos.pizza([
+        { nome: 'Ingredientes', valor: c.custoIngredientes }, { nome: 'Gastos indiretos', valor: c.gastosIndiretos },
+        { nome: 'Mão de obra', valor: c.maoDeObra }, { nome: 'Lucro', valor: c.lucro }].filter(x => x.valor > 0.004), { tamanho: 130, compacto: true })}` : ''}`;
   } catch (e) { box.innerHTML = `<p class="sec">${esc(e.message)}</p>`; }
 }, 200);
 
@@ -352,6 +373,14 @@ TELAS.insumo = async r => {
         <button class="btn lev peq" data-acao="informarEmbalagem" data-chave="${esc(v)}" data-desc="${esc(v)}">Corrigir</button></li>`).join('')}</ul>
     </section>
   </div>
+  <section class="bloco" style="margin-top:14px"><header><h2>Onde está mais barato</h2>
+      <button class="btn peq" data-acao="ir" data-para="precos?insumo=${i.id}&q=${encodeURIComponent(termoBusca(i.nome))}">Pesquisar nos sites</button></header>
+    <p class="sec peq" style="margin-bottom:6px">Pelas suas próprias notas fiscais, por ${esc(i.unidadeExib)}. Para comparar com os sites que você cadastrou, use Pesquisar nos sites.</p>
+    ${(i.porLoja || []).length ? `<div class="rolar"><table class="tab"><thead><tr><th>Loja</th><th class="n">Última compra</th><th class="n">Preço/${esc(i.unidadeExib)}</th><th class="n">Menor já pago</th><th class="n">Compras</th></tr></thead>
+      <tbody>${i.porLoja.map((l, k) => `<tr><td>${k === 0 && i.porLoja.length > 1 ? '<span class="selo ok" style="margin-right:6px">mais barata</span>' : ''}${esc(l.loja)}</td><td class="n">${dataBR(l.ultimaData)}</td>
+        <td class="n"><b>${brl(l.ultimoPreco)}</b></td><td class="n">${brl(l.menorPreco)}</td><td class="n">${l.compras}</td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="sec">Sem compras com unidade identificada.</p>'}
+  </section>
   <section class="bloco" style="margin-top:14px"><h2>Histórico de compras</h2>
     ${(i.compras || []).length ? `<div class="rolar"><table class="tab"><thead><tr><th>Data</th><th>Loja</th><th>Produto</th><th class="n">Qtd.</th><th class="n">Pago</th><th class="n">Preço/${esc(i.unidadeExib)}</th></tr></thead>
     <tbody>${i.compras.map(c => `<tr><td>${dataBR(c.data)}</td><td>${esc(c.loja)}</td><td>${esc(c.descricao)}</td><td class="n">${numBR(c.quantidade)} ${esc(c.unidade || '')}</td>
@@ -405,3 +434,83 @@ ACOES.novoInsumo = () => modal(`<h2>Insumo sem nota</h2>
     const r = await salvar('insumos', { nome, base: $('#mB', el).value, metodoPreco: 'manual', precoManual: lerNum($('#mP', el).value), vinculos: [] });
     ir('insumo/' + r.id);
   });
+
+/* ---------- gastos indiretos da receita ---------- */
+const CAT_INDIRETAS = () => (S.dados.tarifas && S.dados.tarifas.categoriasIndiretas) || ['Energia elétrica', 'Gás', 'Água', 'Limpeza e descartáveis', 'Outros'];
+const opcoesCat = atual => CAT_INDIRETAS().map(c => `<option ${c === atual ? 'selected' : ''}>${esc(c)}</option>`).join('');
+const opcoesEquip = atual => S.dados.equipamentos.map(e => `<option value="${e.id}" ${e.id === atual ? 'selected' : ''}>${esc(e.nome)}${e.custoHora != null ? ' (' + brl(e.custoHora) + '/h)' : ''}</option>`).join('');
+
+function desenharIndiretos() {
+  const box = $('#rInds'); if (!box) return;
+  const its = S.receita.indiretos;
+  if (!its.length) { box.innerHTML = '<p class="sec" style="margin-bottom:8px">Nenhum gasto indireto.</p>'; return; }
+  box.innerHTML = its.map((g, k) => `<div class="ing" data-k="${k}">
+      <div class="l1"><input type="text" class="nome" value="${esc(g.nome || '')}" placeholder="Nome (ex.: Forno, Luz da cozinha)" aria-label="Nome do gasto">
+        <select class="icat" aria-label="Categoria" style="max-width:170px;min-height:34px;padding:4px 8px">${opcoesCat(g.categoria)}</select>
+        <button class="btn lev peq" data-acao="salvarModelo" data-k="${k}" title="Salvar para usar em outras receitas">Salvar</button>
+        <button class="btn lev peq" data-acao="remInd" data-k="${k}" aria-label="Remover">✕</button></div>
+      ${g.modo === 'equipamento' ? `<div class="l2" style="grid-template-columns:1fr 110px auto">
+          <select class="ieq" aria-label="Equipamento">${opcoesEquip(g.equipamentoId)}</select>
+          <label style="display:flex;align-items:center;gap:6px"><input type="text" inputmode="decimal" class="imin" value="${numBR(g.minutos)}" aria-label="Minutos ligado"><span class="sec">min</span></label>
+          <span class="custo" id="indCusto${k}">—</span></div>`
+      : `<div class="l2" style="grid-template-columns:1fr auto"><label style="display:flex;align-items:center;gap:6px;max-width:200px"><span class="sec">R$</span>
+          <input type="text" inputmode="decimal" class="ival" value="${g.valor != null ? numBR(g.valor, 2) : ''}" aria-label="Valor"></label>
+          <span class="custo" id="indCusto${k}">—</span></div>`}
+      <div id="indAviso${k}"></div></div>`).join('');
+  $$('.ing', box).forEach(div => {
+    const k = +div.dataset.k, g = its[k];
+    $('input.nome', div).oninput = e => { g.nome = e.target.value; };
+    $('.icat', div).onchange = e => { g.categoria = e.target.value; recalcular(); };
+    const eq = $('.ieq', div); if (eq) eq.onchange = e => {
+      g.equipamentoId = e.target.value;
+      const x = porId('equipamentos', g.equipamentoId);
+      if (x) {
+        // Nome e categoria acompanham o equipamento, a não ser que o usuário tenha digitado outro nome
+        if (!g.nome || S.dados.equipamentos.some(o => o.nome === g.nome)) { g.nome = x.nome; $('input.nome', div).value = g.nome; }
+        if (x.categoria) { g.categoria = x.categoria; $('.icat', div).value = x.categoria; }
+      }
+      recalcular();
+    };
+    const mi = $('.imin', div); if (mi) mi.oninput = e => { g.minutos = lerNum(e.target.value) || 0; recalcular(); };
+    const vl = $('.ival', div); if (vl) vl.oninput = e => { g.valor = lerNum(e.target.value); recalcular(); };
+  });
+}
+ACOES.remInd = el => { S.receita.indiretos.splice(+el.dataset.k, 1); desenharIndiretos(); recalcular(); };
+ACOES.indManual = () => { S.receita.indiretos.push({ nome: '', categoria: 'Outros', modo: 'manual', valor: null }); desenharIndiretos(); recalcular(); $$('#rInds .nome').pop().focus(); };
+ACOES.indEquip = () => {
+  if (!S.dados.equipamentos.length) return editarEquipamento(null, eq => { S.receita.indiretos.push({ nome: eq.nome, categoria: eq.categoria, modo: 'equipamento', equipamentoId: eq.id, minutos: 30 }); desenharIndiretos(); recalcular(); });
+  const e = S.dados.equipamentos[0];
+  S.receita.indiretos.push({ nome: e.nome, categoria: e.categoria || 'Energia elétrica', modo: 'equipamento', equipamentoId: e.id, minutos: 30 });
+  desenharIndiretos(); recalcular();
+  const ult = $$('#rInds .imin').pop(); if (ult) { ult.focus(); ult.select(); }
+};
+ACOES.indModelo = () => {
+  const grupos = {};
+  S.dados.gastosIndiretos.forEach(m => (grupos[m.categoria || 'Outros'] = grupos[m.categoria || 'Outros'] || []).push(m));
+  modal(`<h2>Gasto salvo</h2><p class="sec">Escolha um ou mais para adicionar à receita.</p>
+    ${Object.keys(grupos).map(c => `<div class="mes-sep"><span>${esc(c)}</span></div><ul class="lista">${grupos[c].map(m => `<li data-id="${m.id}">
+      <div class="meio"><div class="titulo">${esc(m.nome)}</div><div class="sec peq">${descModelo(m)}</div></div><span class="selo">adicionar</span></li>`).join('')}</ul>`).join('')}
+    <div class="rodape"><button class="btn" data-fechar>Fechar</button></div>`, (el) => {
+    $$('li[data-id]', el).forEach(li => li.onclick = () => {
+      const m = porId('gastosIndiretos', li.dataset.id);
+      S.receita.indiretos.push({ nome: m.nome, categoria: m.categoria, modo: m.modo, valor: m.valor, equipamentoId: m.equipamentoId, minutos: m.minutos, modeloId: m.id });
+      li.querySelector('.selo').textContent = 'adicionado'; li.querySelector('.selo').className = 'selo ok';
+      desenharIndiretos(); recalcular();
+    });
+  });
+};
+function descModelo(m) {
+  if (m.modo === 'equipamento') { const e = porId('equipamentos', m.equipamentoId); return `${numBR(m.minutos)} min de ${e ? esc(e.nome) : 'equipamento removido'}`; }
+  return m.valor != null ? brl(m.valor) + ' por receita' : 'valor a informar';
+}
+ACOES.salvarModelo = async el => {
+  const g = S.receita.indiretos[+el.dataset.k];
+  if (!(g.nome || '').trim()) return toast('Dê um nome ao gasto antes de salvar.', true);
+  const existente = g.modeloId && porId('gastosIndiretos', g.modeloId);
+  try {
+    const r = await salvar('gastosIndiretos', { ...(existente || {}), nome: g.nome.trim(), categoria: g.categoria || 'Outros', modo: g.modo,
+      valor: g.modo === 'manual' ? g.valor : null, equipamentoId: g.modo === 'equipamento' ? g.equipamentoId : null, minutos: g.modo === 'equipamento' ? g.minutos : null });
+    g.modeloId = r.id; toast(`"${g.nome}" salvo em ${g.categoria}. Use em outras receitas pelo botão Gasto salvo.`);
+  } catch (e) { falha(e); }
+};
+

@@ -2,6 +2,16 @@
 
 Controle financeiro da confeitaria no celular e no computador, com os mesmos dados nos dois.
 
+- **Notas**: QR code do cupom (câmera ou foto), link do QR, chave de acesso (sem QR), XML da NF-e,
+  lançamento manual e importação da planilha de controle (aba *Notas_Consolidadas*).
+- **Resumo**: painel no estilo da aba *Análise Resumo*, com gastos por mês (toque num mês para filtrar),
+  indicadores, fornecedores, formas de pagamento, categorias, "Principais descobertas" e insumos que subiram de preço.
+- **Receitas**: ficha técnica com ingredientes vindos das notas, preço tabelado por kg/L/unidade,
+  mão de obra e margem (cada uma aditiva em R$ ou multiplicativa em %).
+- **Vendas**: faturamento, para calcular lucro, margem e custo de insumos sobre as vendas.
+- **Excel**: no formato da planilha atual, com gráficos e tabela dinâmica.
+- **Sincronização**: vários celulares e o computador no mesmo Wi-Fi, com código de verificação e aparelhos lembrados.
+
 ## Baixar e instalar (pelo GitHub)
 
 A cada envio para a branch `main`, o GitHub compila tudo sozinho (aba **Actions**) e publica em
@@ -12,6 +22,36 @@ A cada envio para a branch `main`, o GitHub compila tudo sozinho (aba **Actions*
 - `GestaoConfeitaria-Windows.zip`: descompacte e abra `GestaoConfeitaria.exe` — já traz o Java, não precisa instalar nada.
 - `GestaoConfeitaria-Computador-Java.zip`: para Mac/Linux ou quem já tem Java 17+ (`Abrir no Windows.bat` / `abrir.sh`).
 
+Para as atualizações instalarem por cima da versão anterior, configure uma vez a chave de assinatura
+em *Settings > Secrets and variables > Actions*: `ASSINATURA_BASE64` e `ASSINATURA_SENHA`.
+O arquivo da chave (`.jks`) nunca deve ir para o repositório — o `.gitignore` já impede.
+
+## Como usar no computador
+
+Precisa do Java 17 ou mais novo ([adoptium.net](https://adoptium.net)).
+
+1. Dê dois cliques em `GestaoConfeitaria.jar` (ou em `Abrir no Windows.bat`).
+2. Uma janelinha confirma que o app está aberto e a tela abre no navegador (endereço `http://127.0.0.1:47821`).
+   A tela só é acessível no próprio computador.
+3. Os dados ficam na pasta `GestaoConfeitaria` dentro da sua pasta de usuário.
+4. Na primeira vez, o Windows pode perguntar sobre o firewall: permita em **redes privadas**, para o celular encontrar o computador.
+
+Para gerar um instalador que não precisa de Java instalado (no Windows, com o JDK 17+):
+
+```
+jpackage --input . --main-jar GestaoConfeitaria.jar --name "Gestao Confeitaria" --type exe --win-shortcut --win-menu
+```
+
+Para compilar o computador a partir do código: `./gradlew :desktop:jarCompleto` → `desktop/build/libs/GestaoConfeitaria.jar`.
+No VS Code há tarefas prontas em *Terminal > Executar Tarefa…* (pasta `.vscode`).
+
+## Como compilar o app Android
+
+1. Abra a pasta `GestaoConfeitaria` no Android Studio (Ladybug ou mais novo) e aguarde o Gradle.
+2. Escolha o módulo **app** e clique em **Run**, ou gere o APK em *Build > Build APK(s)*
+   (`./gradlew :app:assembleRelease` → `app/build/outputs/apk/release/`).
+
+Requisitos: Android 8.0+ com Google Play Services (o leitor de QR é o do Google, sem pedir permissão de câmera).
 
 ## Primeiros passos
 
@@ -45,6 +85,49 @@ Depois dos ingredientes, o app pede:
 - **Margem de lucro**: aditiva (soma R$) ou multiplicativa (% sobre o custo com mão de obra).
 
 O resultado mostra custo total, preço de venda, preço por porção e margem sobre o preço.
+
+## Gastos indiretos
+
+Luz, gás, água e outras contas entram no custo da receita como um valor em R$:
+
+- **Equipamento por tempo**: cadastre o equipamento uma vez (em *Receitas > Gastos indiretos*) e, na receita,
+  informe só os minutos. O custo é calculado assim:
+  - elétrico: potência (W) ÷ 1000 × horas × % do tempo ligado × tarifa (R$/kWh);
+  - gás de botijão: consumo (kg/h) × horas × preço do botijão ÷ peso do botijão;
+  - gás encanado: consumo (m³/h) × horas × tarifa (R$/m³);
+  - ou um custo fixo por hora.
+  A tarifa de luz pode ser calculada pela própria conta (valor total ÷ kWh consumidos).
+- **Valor manual**: ex.: R$ 2 de rateio da geladeira.
+- **Gastos salvos**: qualquer gasto indireto pode ser salvo com uma categoria (Energia elétrica, Gás, Água…)
+  e adicionado a outras receitas com um toque.
+
+O preço da receita fica: ingredientes + gastos indiretos + mão de obra = custo total; custo total + margem = preço.
+As contas pagas (luz, gás, água) também podem ser lançadas como notas na categoria *Contas (luz, gás, água)*.
+
+## Gráficos do resumo
+
+- **Crescimento e queda mês a mês**: setas do mês anterior para o mês atual, para gastos, vendas ou lucro
+  (verde = bom, vermelho = ruim), com maior alta, maior queda e a tendência dos últimos 3 meses.
+- **Barras ou pizza**: fornecedores, formas de pagamento e categorias podem ser vistos nos dois formatos.
+- Os indicadores mostram ▲/▼ em relação ao período anterior (ou ao mês anterior, com um mês selecionado).
+- No Excel, a *Análise Resumo* ganhou a pizza por categoria e a tabela de crescimento mês a mês.
+
+## Pesquisar preço
+
+Na aba **Pesquisar preço** você cadastra os sites que quer comparar (ex.: Mercado Livre, Mundial, Hortifruti);
+só você adiciona e remove. Digite o produto e o app procura em cada site e mostra:
+
+- o preço em cada site, e o preço por kg, L ou unidade quando a embalagem aparece no nome;
+- o mais barato entre os sites e, se a busca veio de um insumo, a comparação com a sua última compra;
+- o botão **Abrir**, que leva direto à página do produto.
+
+Como funciona: o app descobre sozinho o endereço de busca do site (API de lojas VTEX, busca declarada pelo
+próprio site ou formulário de busca) e lê os preços da página (dados estruturados, Mercado Livre, lojas VTEX ou
+leitura genérica). Se um site não for reconhecido, informe o endereço de busca dele com `{busca}` no lugar
+do produto (ex.: `https://www.loja.com.br/busca?q={busca}`). No celular, páginas montadas por JavaScript são
+abertas num navegador interno invisível antes da leitura.
+
+Cada insumo também mostra em qual loja você comprou mais barato, pelas suas próprias notas.
 
 ## Notas sem QR code
 
@@ -87,6 +170,7 @@ core/          Kotlin puro, sem dependências — usado pelo Android e pelo comp
   Xlsx.kt          gerador de Excel (estilos, gráficos, tabela dinâmica)
   Relatorio.kt     o Excel no formato da planilha de controle
   Sync.kt          descoberta, pareamento, criptografia e sincronização
+  Indiretos.kt     gastos indiretos: equipamentos, tarifas, gastos salvos
   Api.kt           métodos chamados pela interface
 shared-assets/web/ interface (HTML/CSS/JS), a mesma no celular e no computador
 app/           Android: WebView, leitor de QR, consulta na SEFAZ, salvar arquivos

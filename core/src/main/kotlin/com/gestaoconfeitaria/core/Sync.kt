@@ -364,29 +364,50 @@ class ClienteSync(private val banco: Banco, private val disp: Dispositivo, priva
 object Pagina {
     fun hostPermitido(host: String?): Boolean = host != null && (host.equals("gov.br", true) || host.endsWith(".gov.br", true))
 
-    fun buscar(url: String): MObj {
+    /** Página da SEFAZ (só .gov.br). */
+    fun buscar(url: String): MObj = baixar(url, ::hostPermitido,
+        "Só é permitido abrir sites da Secretaria da Fazenda (.gov.br).", "O site da SEFAZ")
+
+    /** "lista.mercadolivre.com.br" → "mercadolivre.com.br"; "www.loja.com" → "loja.com". */
+    fun dominioBase(host: String): String {
+        val p = host.lowercase().trimEnd('.').split('.')
+        val n = if (p.size >= 3 && p.last().length == 2 && p[p.size - 2] in setOf("com", "net", "org", "gov", "edu", "art", "blog", "eco", "ind", "inf", "tur")) 3 else 2
+        return p.takeLast(minOf(n, p.size)).joinToString(".")
+    }
+
+    /** Endereços da rede local e IPs não são aceitos nos sites de preço (só domínios públicos). */
+    fun hostPublico(host: String?): Boolean {
+        if (host.isNullOrBlank()) return false
+        val h = host.lowercase().trim('[', ']')
+        if (System.getProperty("gc.permitirLocal") == "1") return true   // apenas para testes automatizados
+        if (h == "localhost" || h.endsWith(".local") || h.endsWith(".lan") || !h.contains('.')) return false
+        if (Regex("^[0-9.]+$").matches(h) || h.contains(':')) return false
+        return true
+    }
+
+    /** Baixa uma página seguindo redirecionamentos, só para hosts aceitos por [permitido]. */
+    fun baixar(url: String, permitido: (String?) -> Boolean, msgBloqueio: String, nomeSite: String = "O site"): MObj {
         var atual = URL(url)
         repeat(6) {
-            if (atual.protocol !in listOf("http", "https") || !hostPermitido(atual.host))
-                throw IllegalArgumentException("Só é permitido abrir sites da Secretaria da Fazenda (.gov.br).")
+            if (atual.protocol !in listOf("http", "https") || !permitido(atual.host)) throw IllegalArgumentException(msgBloqueio)
             val c = atual.openConnection() as HttpURLConnection
             c.instanceFollowRedirects = false
             c.connectTimeout = 10000; c.readTimeout = 20000
             c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36")
-            c.setRequestProperty("Accept", "text/html,application/xhtml+xml")
+            c.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
             c.setRequestProperty("Accept-Language", "pt-BR,pt;q=0.9")
             val st = c.responseCode
             if (st in 300..399) {
                 atual = URL(atual, c.getHeaderField("Location") ?: throw IllegalStateException("Redirecionamento sem destino"))
                 return@repeat
             }
-            if (st >= 400) throw IllegalStateException("O site da SEFAZ respondeu com erro $st.")
-            val bytes = c.inputStream.use { it.readBytes() }
+            if (st >= 400) throw IllegalStateException("$nomeSite respondeu com erro $st.")
+            val bytes = c.inputStream.use { it.readNBytes(8 * 1024 * 1024) }
             val cs = Regex("charset=([\\w-]+)", RegexOption.IGNORE_CASE).find(c.contentType ?: "")?.groupValues?.get(1)
                 ?: Regex("<meta[^>]+charset=[\"']?([\\w-]+)", RegexOption.IGNORE_CASE).find(String(bytes, 0, minOf(bytes.size, 4000), Charsets.ISO_8859_1))?.groupValues?.get(1)
                 ?: "UTF-8"
             val html = runCatching { String(bytes, charset(cs)) }.getOrElse { String(bytes, Charsets.UTF_8) }
-            return obj("url" to atual.toString(), "html" to html)
+            return obj("url" to atual.toString(), "html" to html, "tipo" to (c.contentType ?: ""))
         }
         throw IllegalStateException("Muitos redirecionamentos.")
     }

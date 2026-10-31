@@ -15,6 +15,8 @@ class Relatorio(private val banco: Banco, private val custos: Custos, private va
     private val CINZA = "5B6573"; private val CLARO = "F3F6F9"; private val LINHA = "DCE3E8"
     private val MOEDA = "\"R$\" #,##0.00"
     private val MOEDA0 = "\"R$\" #,##0"
+    /** Cores das fatias de pizza (paleta categórica validada para daltonismo; "Outros" em cinza). */
+    private val PIZZA = listOf("2A78D6", "EB6834", "1BAF7A", "EDA100", "E87BA4", "008300", "9AA5AB")
 
     private val titulo = Xlsx.Estilo(negrito = true, tamanho = 16, corFonte = "FFFFFF", fundo = AZUL, vertical = "center")
     private val subtitulo = Xlsx.Estilo(italico = true, corFonte = CINZA, vertical = "center")
@@ -51,7 +53,7 @@ class Relatorio(private val banco: Banco, private val custos: Custos, private va
     private fun analise(a: Xlsx.Aba, p: Obj) {
         a.semGrade = true
         a.paisagem = true
-        a.areaImpressao = "A1:L50"
+        a.areaImpressao = "A1:L52"
         for (c in 0..11) a.largura(c, 10.5)
         a.largura(12, 3.0)
         a.texto(0, 0, "ANÁLISE DE GASTOS — RESUMO MENSAL", titulo); a.mesclar(0, 0, 0, 11, titulo); a.altura(0, 30.0)
@@ -64,7 +66,10 @@ class Relatorio(private val banco: Banco, private val custos: Custos, private va
         val serie = p.lista("serie")
         val forn = p.lista("fornecedores").take(6)
         val pags = p.lista("pagamentos").take(6)
-        val cats = p.lista("categorias").take(8)
+        // Pizza com no máximo 6 fatias; o restante vira "Demais"
+        val cats = p.lista("categorias").let { l ->
+            if (l.size <= 6) l else l.take(6) + obj("nome" to "Demais", "valor" to l.drop(6).sumOf { it.num("valor") })
+        }
 
         // Tabelas de apoio (fonte dos gráficos), como nas colunas N:V da planilha original
         val cabT = Xlsx.Estilo(negrito = true, corFonte = CINZA, borda = LINHA)
@@ -128,8 +133,31 @@ class Relatorio(private val banco: Banco, private val custos: Custos, private va
             val r = 32 + i * 3
             a.texto(r, 6, "• $s", et); a.mesclar(r, 6, r + 2, 11, et)
         }
+        // Gastos por categoria (pizza) e crescimento mês a mês (setas ▲▼)
+        if (cats.isNotEmpty()) a.grafico(Xlsx.Grafico("Gastos por categoria", false, Xlsx.intervalo(a.nome, 1, 24, cats.size, 24), cats.map { it.str("nome") },
+            listOf(Triple("Valor", Xlsx.intervalo(a.nome, 1, 25, cats.size, 25), cats.map { it.num("valor") })), PIZZA, 0 to 47, 6 to 64, pizza = true))
+        a.texto(47, 6, "CRESCIMENTO MÊS A MÊS", desc); a.mesclar(47, 6, 47, 11, desc)
+        val cabV = Xlsx.Estilo(negrito = true, corFonte = CINZA, borda = LINHA, tamanho = 10)
+        listOf("Mês", "Gastos", "Var.", "Vendas", "Lucro", "Var.").forEachIndexed { i, h -> a.texto(48, 6 + i, h, cabV.copy(alinhar = if (i == 0) null else "right")) }
+        val pequeno = Xlsx.Estilo(formato = MOEDA0, tamanho = 10)
+        fun seta(r: Int, c: Int, atual: Double, anterior: Double?, subirEhBom: Boolean) {
+            if (anterior == null || anterior == 0.0) { a.texto(r, c, "—", Xlsx.Estilo(corFonte = CINZA, alinhar = "right", tamanho = 10)); return }
+            val v = (atual - anterior) / Math.abs(anterior)
+            val sobe = v >= 0
+            val cor = if (Math.abs(v) < 0.0005) CINZA else if (sobe == subirEhBom) VERDE else "B4372F"
+            a.texto(r, c, "${if (sobe) "▲" else "▼"} ${Formato.pct(Math.abs(v), 0)}", Xlsx.Estilo(corFonte = cor, negrito = true, alinhar = "right", tamanho = 10))
+        }
+        serie.forEachIndexed { i, s ->
+            val r = 49 + i; val ant = serie.getOrNull(i - 1)
+            a.texto(r, 6, s.str("rotulo"), Xlsx.Estilo(tamanho = 10))
+            a.num(r, 7, s.num("gastos"), pequeno); seta(r, 8, s.num("gastos"), ant?.num("gastos"), false)
+            a.num(r, 9, s.num("vendas"), pequeno); a.num(r, 10, s.num("lucro"), pequeno)
+            seta(r, 11, s.num("lucro"), ant?.num("lucro"), true)
+        }
+        val fim = maxOf(65, 49 + serie.size) + 1
         val q = Xlsx.Estilo(italico = true, tamanho = 9, corFonte = "6B4F00", fundo = "FFF4E5", quebrar = true, vertical = "top")
-        a.texto(48, 0, "Nota de qualidade: " + p.strs("qualidade").joinToString(" "), q); a.mesclar(48, 0, 49, 11, q)
+        a.texto(fim, 0, "Nota de qualidade: " + p.strs("qualidade").joinToString(" "), q); a.mesclar(fim, 0, fim + 1, 11, q)
+        a.areaImpressao = "A1:L${fim + 2}"
     }
 
     private fun comparacao(atual: Double, anterior: Double): String =
@@ -229,7 +257,7 @@ class Relatorio(private val banco: Banco, private val custos: Custos, private va
 
     private fun receitas(a: Xlsx.Aba) {
         val rs = custos.receitas()
-        val cabs = listOf("Receita", "Rendimento", "Custo ingredientes", "Mão de obra", "Custo total", "Margem / lucro",
+        val cabs = listOf("Receita", "Rendimento", "Custo ingredientes", "Gastos indiretos", "Mão de obra", "Custo total", "Margem / lucro",
             "Preço de venda", "Preço por porção", "Margem sobre o preço", "Situação")
         cabs.forEachIndexed { c, h -> a.texto(0, c, h, cab) }
         a.altura(0, 30.0)
@@ -238,11 +266,11 @@ class Relatorio(private val banco: Banco, private val custos: Custos, private va
             val k = rec.obj("calculo")!!
             a.texto(r, 0, rec.str("nome"), Xlsx.Estilo(negrito = true))
             a.texto(r, 1, "${Formato.numero(k.num("rendimento"))} ${k.str("rendimentoUnidade")}")
-            a.num(r, 2, k.num("custoIngredientes"), moeda); a.num(r, 3, k.num("maoDeObra"), moeda)
-            a.num(r, 4, k.num("custoTotal"), moeda); a.num(r, 5, k.num("lucro"), moeda)
-            a.num(r, 6, k.num("precoVenda"), Xlsx.Estilo(formato = MOEDA, negrito = true)); a.num(r, 7, k.num("precoPorcao"), moeda)
-            a.num(r, 8, k.num("margemSobrePreco"), Xlsx.Estilo(formato = "0.0%"))
-            a.texto(r, 9, if (k.bool("completo")) "OK" else "Faltam preços/unidades")
+            a.num(r, 2, k.num("custoIngredientes"), moeda); a.num(r, 3, k.num("gastosIndiretos"), moeda)
+            a.num(r, 4, k.num("maoDeObra"), moeda); a.num(r, 5, k.num("custoTotal"), moeda); a.num(r, 6, k.num("lucro"), moeda)
+            a.num(r, 7, k.num("precoVenda"), Xlsx.Estilo(formato = MOEDA, negrito = true)); a.num(r, 8, k.num("precoPorcao"), moeda)
+            a.num(r, 9, k.num("margemSobrePreco"), Xlsx.Estilo(formato = "0.0%"))
+            a.texto(r, 10, if (k.bool("completo")) "OK" else "Faltam preços/unidades")
             r++
         }
         r += 2
@@ -258,7 +286,31 @@ class Relatorio(private val banco: Banco, private val custos: Custos, private va
             a.num(r, 6, ing.numOuNull("custo"), moeda); a.texto(r, 7, ing.str("aviso"))
             r++
         }
-        listOf(30.0, 30.0, 14.0, 14.0, 14.0, 14.0, 14.0, 14.0, 12.0, 40.0).forEachIndexed { c, w -> a.largura(c, w) }
+        r += 2
+        a.texto(r++, 0, "GASTOS INDIRETOS POR RECEITA", sub)
+        listOf("Receita", "Item", "Categoria", "Como foi calculado", "Valor", "Aviso").forEachIndexed { c, h -> a.texto(r, c, h, cab) }
+        r++
+        for (rec in rs) for (g in rec.obj("calculo")!!.obj("indiretos")?.lista("itens").orEmpty()) {
+            a.texto(r, 0, rec.str("nome")); a.texto(r, 1, g.str("nome")); a.texto(r, 2, g.str("categoria"))
+            a.texto(r, 3, g.str("detalhe").ifEmpty { "valor informado" }); a.num(r, 4, g.numOuNull("valor"), moeda); a.texto(r, 5, g.str("aviso"))
+            r++
+        }
+        val eqs = custos.indiretos.equipamentos()
+        if (eqs.isNotEmpty()) {
+            r += 2
+            a.texto(r++, 0, "EQUIPAMENTOS", sub)
+            listOf("Equipamento", "Tipo", "Potência / consumo", "Uso da potência", "Custo por hora").forEachIndexed { c, h -> a.texto(r, c, h, cab) }
+            r++
+            for (e in eqs) {
+                a.texto(r, 0, e.str("nome")); a.texto(r, 1, Indiretos.fontes[e.str("fonte")] ?: e.str("fonte"))
+                a.texto(r, 2, when (e.str("fonte")) {
+                    "eletrico" -> "${Formato.numero(e.num("potenciaW"))} W"; "glp" -> "${Formato.numero(e.num("consumo"))} kg/h"
+                    "encanado" -> "${Formato.numero(e.num("consumo"))} m³/h"; else -> Formato.moeda(e.num("custoHora")) + "/h" })
+                a.texto(r, 3, if (e.str("fonte") == "hora") "" else "${Formato.numero(e.num("usoPct", 100.0))}%")
+                a.num(r, 4, e.numOuNull("custoHora"), moeda); r++
+            }
+        }
+        listOf(30.0, 30.0, 22.0, 30.0, 14.0, 14.0, 14.0, 14.0, 14.0, 12.0, 40.0).forEachIndexed { c, w -> a.largura(c, w) }
         a.congelar(1)
     }
 

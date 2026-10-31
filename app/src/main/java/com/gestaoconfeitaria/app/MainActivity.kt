@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var api: Api
     private lateinit var web: WebView
+    private lateinit var raiz: FrameLayout
     private lateinit var painelSefaz: LinearLayout
     private lateinit var webSefaz: WebView
     private lateinit var tituloSefaz: TextView
@@ -94,7 +95,7 @@ class MainActivity : ComponentActivity() {
         api = Api(filesDir, Build.MODEL ?: "Celular", "android")
         api.banco.aoAlterar = { agendarSync(4000) }
 
-        val raiz = FrameLayout(this)
+        raiz = FrameLayout(this)
         web = WebView(this)
         raiz.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         montarPainelSefaz(raiz)
@@ -159,7 +160,41 @@ class MainActivity : ComponentActivity() {
         api.servidor.pararDescoberta(); rede.parar()
         runCatching { travaMulticast?.release() }; travaMulticast = null
     }
-    override fun onDestroy() { web.destroy(); webSefaz.destroy(); exec.shutdown(); super.onDestroy() }
+    override fun onDestroy() { web.destroy(); webSefaz.destroy(); if (renderCriado) webRender.destroy(); exec.shutdown(); super.onDestroy() }
+
+    // ------------------------------------------------------------ Pesquisar preço: navegador interno invisível
+    // Alguns sites montam a lista de produtos com JavaScript. A página é aberta aqui (atrás da tela, sem aparecer)
+    // e o HTML já montado volta para a interface ler os preços. Só abre sites cadastrados pelo usuário.
+
+    private var idRender = 0
+    private var renderCriado = false
+    @SuppressLint("SetJavaScriptEnabled")
+    private val webRender: WebView by lazy {
+        renderCriado = true
+        WebView(this).apply {
+            settings.javaScriptEnabled = true; settings.domStorageEnabled = true
+            settings.blockNetworkImage = true                       // não precisa baixar imagens para ler preços
+            visibility = View.INVISIBLE
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = !api.siteCadastrado(request.url.host)
+                override fun onPageFinished(view: WebView, url: String) { if (idRender != 0) { main.removeCallbacks(lerRender); main.postDelayed(lerRender, 2500) } }
+            }
+            raiz.addView(this, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+    }
+    private val lerRender = Runnable {
+        if (idRender == 0) return@Runnable
+        webRender.evaluateJavascript("document.documentElement.outerHTML") { r ->
+            val id = idRender; if (id == 0) return@evaluateJavascript
+            idRender = 0; main.removeCallbacks(tempoRender)
+            val html = runCatching { JSONTokener(r).nextValue() as? String }.getOrNull() ?: ""
+            responder(id, obj("url" to (webRender.url ?: ""), "html" to html))
+            webRender.loadUrl("about:blank")
+        }
+    }
+    private val tempoRender = Runnable {
+        if (idRender != 0) { val id = idRender; idRender = 0; webRender.stopLoading(); responderErro(id, "O site demorou demais para responder.") }
+    }
 
     // ------------------------------------------------------------ ponte JS ↔ Kotlin
 
@@ -196,6 +231,15 @@ class MainActivity : ComponentActivity() {
                 @Suppress("UNCHECKED_CAST")
                 val bytes = runCatching { api.excel(a["filtro"] as? Obj ?: emptyMap()) }.getOrElse { responderErro(id, it.message ?: "erro"); return@execute }
                 main.post { salvarComo(id, "Controle_Financeiro_${java.time.LocalDate.now()}.xlsx", MIME_XLSX, bytes) }
+            }
+            "renderizar" -> {
+                val url = a.str("url")
+                if (!api.siteCadastrado(Uri.parse(url).host)) { responderErro(id, "Este endereço não é de um site cadastrado em Pesquisar preço."); return }
+                if (idRender != 0) responderErro(idRender, "cancelado")
+                idRender = id
+                main.removeCallbacks(lerRender); main.removeCallbacks(tempoRender)
+                webRender.loadUrl(url)
+                main.postDelayed(tempoRender, 25_000)
             }
             "salvarArquivo" -> salvarComo(id, a.str("nome"), a.str("mime", "application/octet-stream"), a.str("texto").toByteArray(Charsets.UTF_8))
             else -> responderErro(id, "Função nativa desconhecida: $metodo")

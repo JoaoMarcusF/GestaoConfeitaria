@@ -34,6 +34,7 @@ class Xlsx {
         val series: List<Triple<String, String, List<Double>>>,   // nome, referência, valores
         val cores: List<String>, val de: Pair<Int, Int>, val ate: Pair<Int, Int>,  // (coluna, linha) base 0
         val formatoRotulo: String? = null, val formatoEixo: String = "#,##0",
+        val pizza: Boolean = false,   // gráfico de pizza (usa só a primeira série; uma cor por fatia)
     )
 
     /** Tabela dinâmica simples: uma linha, uma coluna e um valor somado. */
@@ -283,7 +284,33 @@ class Xlsx {
         """<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="$NS_C">""" +
         """<c:chart xmlns:c="$NS_C" xmlns:r="$NS_REL" r:id="rId$id"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>"""
 
+    private fun titulo(t: String) = """<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1200" b="1"><a:solidFill><a:srgbClr val="263238"/></a:solidFill></a:defRPr></a:pPr>""" +
+        """<a:r><a:rPr lang="pt-BR" sz="1200" b="1"><a:solidFill><a:srgbClr val="263238"/></a:solidFill></a:rPr><a:t>${esc(t)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>"""
+
+    private fun pizza(g: Grafico): String {
+        val (_, refValores, valores) = g.series.first()
+        val texto = """<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900"><a:solidFill><a:srgbClr val="263238"/></a:solidFill></a:defRPr></a:pPr><a:endParaRPr lang="pt-BR"/></a:p></c:txPr>"""
+        val sb = StringBuilder(XML + """<c:chartSpace xmlns:c="$NS_C" xmlns:a="$NS_A" xmlns:r="$NS_REL"><c:roundedCorners val="0"/><c:chart>""")
+        sb.append(titulo(g.titulo)).append("""<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/><c:pieChart><c:varyColors val="1"/>""")
+        sb.append("""<c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>${esc(g.series.first().first)}</c:v></c:tx>""")
+        valores.indices.forEach { i ->
+            // Fatias com borda branca de 2 pt (separa as cores, inclusive para daltônicos)
+            sb.append("""<c:dPt><c:idx val="$i"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="${g.cores[i % g.cores.size]}"/></a:solidFill><a:ln w="25400"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln></c:spPr></c:dPt>""")
+        }
+        sb.append("""<c:dLbls><c:numFmt formatCode="0%" sourceLinked="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>$texto<c:dLblPos val="bestFit"/>""")
+        sb.append("""<c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="1"/><c:showBubbleSize val="0"/><c:showLeaderLines val="1"/></c:dLbls>""")
+        sb.append("""<c:cat><c:strRef><c:f>${esc(g.categorias)}</c:f><c:strCache><c:ptCount val="${g.nomesCategorias.size}"/>""")
+        g.nomesCategorias.forEachIndexed { k, s -> sb.append("""<c:pt idx="$k"><c:v>${esc(s)}</c:v></c:pt>""") }
+        sb.append("""</c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>${esc(refValores)}</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${valores.size}"/>""")
+        valores.forEachIndexed { k, v -> sb.append("""<c:pt idx="$k"><c:v>${num(v)}</c:v></c:pt>""") }
+        sb.append("""</c:numCache></c:numRef></c:val></c:ser><c:firstSliceAng val="0"/></c:pieChart></c:plotArea>""")
+        sb.append("""<c:legend><c:legendPos val="r"/><c:overlay val="0"/>${texto.replace("263238", "455A64")}</c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>""")
+        sb.append("""<c:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln w="9525"><a:solidFill><a:srgbClr val="DCE3E8"/></a:solidFill></a:ln></c:spPr></c:chartSpace>""")
+        return sb.toString()
+    }
+
     private fun grafico(g: Grafico): String {
+        if (g.pizza) return pizza(g)
         val sb = StringBuilder(XML + """<c:chartSpace xmlns:c="$NS_C" xmlns:a="$NS_A" xmlns:r="$NS_REL"><c:roundedCorners val="0"/><c:chart>""")
         sb.append("""<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1200" b="1"><a:solidFill><a:srgbClr val="263238"/></a:solidFill></a:defRPr></a:pPr>""")
         sb.append("""<a:r><a:rPr lang="pt-BR" sz="1200" b="1"><a:solidFill><a:srgbClr val="263238"/></a:solidFill></a:rPr><a:t>${esc(g.titulo)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>""")

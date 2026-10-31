@@ -2,6 +2,52 @@
 'use strict';
 
 S.filtro = { preset: '12m', categoria: '', mes: '' };
+S.metricaSeta = 'gastos';
+
+/** Barras ou pizza em cada bloco (lembrado neste aparelho). */
+const VIS = {
+  ler(b) { try { return localStorage.getItem('gc.vis.' + b) || 'barras'; } catch (e) { return VIS['_' + b] || 'barras'; } },
+  gravar(b, v) { VIS['_' + b] = v; try { localStorage.setItem('gc.vis.' + b, v); } catch (e) { } },
+};
+function blocoVis(id, titulo, dica, itens, opBarras, opPizza = {}) {
+  const v = VIS.ler(id);
+  return `<section class="bloco"><header><h2>${titulo}</h2><span style="display:flex;gap:8px;align-items:center">${dica ? `<span class="sec peq">${dica}</span>` : ''}
+      <span class="vis-troca" role="group" aria-label="Tipo de gráfico"><button class="${v === 'barras' ? 'on' : ''}" data-acao="trocarVis" data-b="${id}" data-v="barras">Barras</button><button class="${v === 'pizza' ? 'on' : ''}" data-acao="trocarVis" data-b="${id}" data-v="pizza">Pizza</button></span></span></header>
+    ${v === 'pizza' ? Graficos.pizza(itens, { acao: opBarras.acao, ...opPizza }) : Graficos.barras(itens, opBarras)}</section>`;
+}
+ACOES.trocarVis = el => { VIS.gravar(el.dataset.b, el.dataset.v); const y = window.scrollY; render().then(() => window.scrollTo(0, y)); };
+
+/** "▲ 12,3% vs período anterior", com cor de bom/ruim conforme o que é desejável. */
+function variacao(atual, anterior, subirEhBom, quando = 'vs período anterior') {
+  if (!anterior) return { t: 'sem período anterior para comparar', c: '' };
+  const v = (atual - anterior) / Math.abs(anterior);
+  if (Math.abs(v) < 0.0005) return { t: `= estável ${quando}`, c: '' };
+  return { t: `${v > 0 ? '▲' : '▼'} ${pct(Math.abs(v))} ${quando}`, c: (v > 0) === subirEhBom ? 'bom' : 'ruim' };
+}
+
+const METRICAS = { gastos: ['Gastos', false], vendas: ['Vendas', true], lucro: ['Lucro', true] };
+function blocoSetas(serie) {
+  const temVendas = serie.some(s => s.vendas > 0);
+  const m = !temVendas ? 'gastos' : S.metricaSeta;
+  const [nome, subirEhBom] = METRICAS[m];
+  const vals = serie.map(s => s[m] || 0);
+  const vars = vals.map((v, i) => i && vals[i - 1] ? { i, v: (v - vals[i - 1]) / Math.abs(vals[i - 1]) } : null).filter(Boolean);
+  const pilula = (rot, x, bomSe) => x ? `<span class="pilula ${(x.v > 0) === bomSe ? 'bom' : 'ruim'}">${rot}: <b>${x.v > 0 ? '▲' : '▼'} ${pct(Math.abs(x.v))}</b> em ${serie[x.i].rotulo}</span>` : '';
+  const alta = vars.length ? vars.reduce((a, b) => b.v > a.v ? b : a) : null;
+  const queda = vars.length ? vars.reduce((a, b) => b.v < a.v ? b : a) : null;
+  let tendencia = '';
+  if (vals.length >= 6) {
+    const ult = vals.slice(-3).reduce((a, b) => a + b, 0), ant = vals.slice(-6, -3).reduce((a, b) => a + b, 0);
+    if (ant) { const v = (ult - ant) / Math.abs(ant); tendencia = `<span class="pilula ${(v > 0) === subirEhBom ? 'bom' : 'ruim'}">Últimos 3 meses vs 3 anteriores: <b>${v > 0 ? '▲' : '▼'} ${pct(Math.abs(v))}</b></span>`; }
+  }
+  return `<section class="bloco" style="margin-bottom:14px"><header><h2>Crescimento e queda mês a mês</h2>
+      <div class="segmento">${Object.entries(METRICAS).map(([k, [n]]) => `<button class="${k === m ? 'on' : ''}" data-acao="metricaSeta" data-m="${k}" ${k !== 'gastos' && !temVendas ? 'disabled title="Registre vendas para ver"' : ''}>${n}</button>`).join('')}</div></header>
+    <p class="sec peq" style="margin-bottom:6px">Cada seta vai do valor do mês anterior ao do mês. <span style="color:var(--menta);font-weight:600">Verde</span> é bom e <span style="color:var(--perigo);font-weight:600">vermelho</span> é ruim${m === 'gastos' ? ': gasto subindo é vermelho' : ''}.</p>
+    ${Graficos.setas(serie, m, { subirEhBom, selecionado: S.filtro.mes })}
+    <div class="resumo-setas">${pilula('Maior alta', alta && alta.v > 0 ? alta : null, subirEhBom)}${pilula('Maior queda', queda && queda.v < 0 ? queda : null, subirEhBom)}${tendencia}</div>
+  </section>`;
+}
+ACOES.metricaSeta = el => { S.metricaSeta = el.dataset.m; const y = window.scrollY; render().then(() => window.scrollTo(0, y)); };
 
 function ultimoMesComDados() {
   let m = '';
@@ -47,8 +93,10 @@ TELAS.resumo = async () => {
   const p = S.filtro.mes ? await GC.chamar('painel', { ...base, de: S.filtro.mes, ate: S.filtro.mes }) : geral;
   const k = p.kpis;
   const cats = geral.categoriasDisponiveis || [];
-  const comp = (a, b) => b > 0 ? { t: `${a >= b ? '+' : '−'}${pct(Math.abs(a / b - 1))} vs período anterior`, c: a >= b ? 'sobe' : 'desce' } : { t: 'sem período anterior', c: '' };
-  const cg = comp(k.gastoTotal, k.gastoAnterior);
+  const quando = S.filtro.mes ? 'vs mês anterior' : 'vs período anterior';
+  const cg = variacao(k.gastoTotal, k.gastoAnterior, false, quando);
+  const cf = variacao(k.faturamento, k.faturamentoAnterior, true, quando);
+  const cr = k.temAnterior && k.faturamentoAnterior > 0 ? variacao(k.resultado, k.resultadoAnterior, true, quando) : null;
   const tituloPeriodo = S.filtro.mes ? mesLongo(S.filtro.mes) : p.periodo;
 
   return `
@@ -75,11 +123,12 @@ TELAS.resumo = async () => {
     </div>
     ${Graficos.meses(geral.serie, S.filtro.mes)}
   </section>
+  ${blocoSetas(geral.serie)}
 
   <div class="kpis">
     ${kpi('Gasto total', brl(k.gastoTotal), cg.t, cg.c)}
-    ${kpi('Faturamento', k.faturamento > 0 ? brl(k.faturamento) : '—', k.faturamento > 0 ? `${k.vendas} vendas, ticket ${brl(k.ticketMedioVenda)}` : 'registre as vendas para ver o lucro', '', 'fat')}
-    ${kpi('Resultado', k.faturamento > 0 ? brl(k.resultado) : '—', k.margem != null ? `margem de ${pct(k.margem)}` : 'vendas menos gastos', k.resultado < 0 && k.faturamento > 0 ? 'sobe' : '')}
+    ${kpi('Faturamento', k.faturamento > 0 ? brl(k.faturamento) : '—', k.faturamento > 0 ? (k.faturamentoAnterior > 0 ? cf.t : `${k.vendas} vendas, ticket ${brl(k.ticketMedioVenda)}`) : 'registre as vendas para ver o lucro', k.faturamentoAnterior > 0 ? cf.c : '', 'fat')}
+    ${kpi('Resultado (lucro)', k.faturamento > 0 ? brl(k.resultado) : '—', cr ? cr.t : (k.margem != null ? `margem de ${pct(k.margem)}` : 'vendas menos gastos'), cr ? cr.c : (k.resultado < 0 && k.faturamento > 0 ? 'ruim' : ''))}
     ${kpi('Custo de insumos sobre vendas', k.cmv != null ? pct(k.cmv) : '—', 'quanto das vendas vai para ingredientes')}
     ${S.filtro.mes ? kpi('Notas no mês', String(k.notas), `ticket médio ${brl(k.ticketMedio)}`) : kpi('Maior mês', k.maiorMes ? brl(k.maiorMes.valor) : '—', k.maiorMes ? k.maiorMes.rotulo : '')}
     ${S.filtro.mes ? kpi('Média mensal do período', brl(geral.kpis.mediaMensal), 'para comparar com este mês') : kpi('Média mensal', brl(k.mediaMensal), 'meses com gasto')}
@@ -89,11 +138,9 @@ TELAS.resumo = async () => {
 
   <div class="grade g-painel">
     <div>
-      <section class="bloco"><header><h2>Principais fornecedores</h2><span class="sec peq">toque para ver as notas</span></header>
-        ${Graficos.barras(p.fornecedores, { cor: 'azul', acao: 'verFornecedor' })}</section>
-      <section class="bloco"><h2>Por forma de pagamento</h2>${Graficos.barras(p.pagamentos, { cor: 'agua' })}</section>
-      <section class="bloco"><header><h2>Por categoria</h2><span class="sec peq">toque para filtrar</span></header>
-        ${Graficos.barras(p.categorias, { acao: 'filtrarCategoria', max: 8 })}</section>
+      ${blocoVis('fornecedores', 'Principais fornecedores', '', p.fornecedores, { cor: 'azul', acao: 'verFornecedor' })}
+      ${blocoVis('pagamentos', 'Por forma de pagamento', '', p.pagamentos, { cor: 'agua' })}
+      ${blocoVis('categorias', 'Por categoria', '', p.categorias, { acao: 'filtrarCategoria', max: 8 })}
     </div>
     <div>
       <section class="bloco"><h2>Principais descobertas</h2>
@@ -109,7 +156,7 @@ TELAS.resumo = async () => {
   <p class="qualidade">${p.qualidade.map(esc).join(' ')}</p>`;
 };
 TELAS.resumo.depois = el => {
-  const rolar = $('.vitrine .rolar', el); if (rolar) rolar.scrollLeft = rolar.scrollWidth;
+  $$('.rolar', el).forEach(r => r.scrollLeft = r.scrollWidth);
   const fc = $('#fCat', el); if (fc) fc.onchange = () => { S.filtro.categoria = fc.value; render(); };
   const de = $('#fDe', el), ate = $('#fAte', el);
   if (de) [de, ate].forEach(i => i.onchange = () => { S.filtro.de = de.value; S.filtro.ate = ate.value; render(); });

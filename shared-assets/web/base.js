@@ -72,10 +72,12 @@ const ICONES = {
   baixar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   mais: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  relogio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 3h6"/></svg>',
 };
 
 /* ---------------- avisos e modais ---------------- */
 function toast(msg, erro = false) {
+  $$('.toast').forEach(x => x.remove());   // um aviso por vez
   const t = document.createElement('div');
   t.className = 'toast' + (erro ? ' erro' : '');
   t.textContent = msg;
@@ -163,7 +165,7 @@ function ir(h) { if (location.hash === '#/' + h) render(); else location.hash = 
 async function render() {
   const r = rotaAtual();
   const tela = TELAS[r.tela] || TELAS.resumo;
-  const nav = { nota: 'notas', adicionar: 'notas', receita: 'receitas', insumos: 'receitas', insumo: 'receitas', venda: 'vendas', dispositivos: 'mais' }[r.tela] || r.tela;
+  const nav = { nota: 'notas', adicionar: 'notas', receita: 'receitas', insumos: 'receitas', insumo: 'receitas', indiretos: 'receitas', venda: 'vendas', dispositivos: 'mais' }[r.tela] || r.tela;
   $$('#nav a').forEach(a => a.classList.toggle('ativo', a.dataset.rota === nav));
   S.editando = !!tela.editavel;
   const app = $('#app');

@@ -11,13 +11,15 @@ import com.gestaoconfeitaria.core.Unidades.Medida
  */
 class Custos(private val banco: Banco) {
 
+    val indiretos = Indiretos(banco)
+
     /** Chave que identifica um mesmo produto em notas diferentes. */
     fun chaveProduto(descricao: String) = Unidades.normalizar(descricao).replace(Regex("\\s+"), " ")
 
     data class Compra(
         val notaId: String, val data: String, val loja: String, val descricao: String, val chave: String,
         val quantidade: Double, val unidade: String, val valor: Double,
-        val conteudo: Conteudo?, val qtdBase: Double?, val precoBase: Double?,
+        val conteudo: Conteudo?, val qtdBase: Double?, val precoBase: Double?, val codigo: String = "",
     )
 
     /** Todas as compras (itens de nota) agrupadas pela chave do produto. */
@@ -32,7 +34,7 @@ class Custos(private val banco: Banco) {
             val c = manual ?: Unidades.detectar(desc, i.str("unidade"), qtd)
             val qb = c?.let { qtd * it.porUnidade.valor }
             r.getOrPut(ch) { ArrayList() } += Compra(n.str("id"), n.str("emissao"), n.str("emitente"), desc, ch, qtd,
-                i.str("unidade"), valor, c, qb, if (qb != null && qb > 0) valor / qb else null)
+                i.str("unidade"), valor, c, qb, if (qb != null && qb > 0) valor / qb else null, i.str("codigo").trim())
         }
         r.values.forEach { l -> l.sortBy { it.data } }
         return r
@@ -131,7 +133,7 @@ class Custos(private val banco: Banco) {
                     c0.copy(conteudo = ct, qtdBase = qb, precoBase = if (qb > 0) c0.valor / qb else null)
                 } ?: c0
                 val qb = c.conteudo?.let { Unidades.paraBaseDoInsumo(Medida(c.qtdBase!!, it.porUnidade.base), base, eq) }
-                val linha = obj("notaId" to c.notaId, "data" to c.data, "loja" to c.loja, "descricao" to c.descricao,
+                val linha = obj("notaId" to c.notaId, "data" to c.data, "loja" to c.loja, "descricao" to c.descricao, "codigo" to c.codigo,
                     "quantidade" to c.quantidade, "unidade" to c.unidade, "valor" to c.valor,
                     "qtdBase" to qb, "precoExib" to qb?.let { if (it > 0) c.valor / it * Unidades.fatorExibicao(base) else null })
                 compras += linha
@@ -166,7 +168,26 @@ class Custos(private val banco: Banco) {
             this["ultimaCompra"] = ultimo
             this["compras"] = compras.take(50)
             this["pendencias"] = pendencias
+            this["porLoja"] = rankingLojas(compras)
+            // Código de barras (EAN) mais recente, para buscar em comparadores de preço
+            this["ean"] = compras.map { it.str("codigo") }.firstOrNull { ehEan(it) }
         }
+    }
+
+    /** Onde cada loja vendeu mais barato (preço por kg/L/un), da menor última compra para a maior. */
+    private fun rankingLojas(compras: List<MObj>): List<MObj> =
+        compras.filter { it.numOuNull("precoExib") != null }.groupBy { it.str("loja").trim().ifEmpty { "Loja não informada" } }
+            .map { (loja, l) ->
+                val ult = l.maxByOrNull { it.str("data") }!!
+                obj("loja" to loja, "ultimoPreco" to ult.num("precoExib"), "ultimaData" to ult.str("data"),
+                    "menorPreco" to l.minOf { it.num("precoExib") }, "compras" to l.size)
+            }.sortedBy { it.num("ultimoPreco") }
+
+    private fun ehEan(c: String): Boolean {
+        if (!Regex("\\d{8}|\\d{12,14}").matches(c)) return false
+        val d = c.map { it - '0' }
+        val soma = d.dropLast(1).reversed().mapIndexed { i, x -> if (i % 2 == 0) x * 3 else x }.sum()
+        return (10 - soma % 10) % 10 == d.last()
     }
 
     fun insumos(): List<MObj> {
@@ -242,13 +263,20 @@ class Custos(private val banco: Banco) {
             if (c == null) completo = false else custo += c
             linhas += linha
         }
+        // Ordem: ingredientes + gastos indiretos (R$) + mão de obra (R$ ou % sobre os ingredientes) = custo total;
+        // custo total + margem (R$ ou % sobre o custo total) = preço de venda.
+        val ind = indiretos.calcular(r.lista("indiretos"))
+        if (!ind.bool("completo")) completo = false
+        val custoIndireto = ind.num("total")
         val mo = r.obj("maoDeObra"); val mg = r.obj("margem")
-        val custoTotal = aplicar(custo, mo)
+        val maoDeObra = aplicar(custo, mo) - custo
+        val custoTotal = custo + custoIndireto + maoDeObra
         val preco = aplicar(custoTotal, mg)
         val rend = r.num("rendimento", 1.0).let { if (it <= 0) 1.0 else it }
         return obj(
             "ingredientes" to linhas, "completo" to completo,
-            "custoIngredientes" to custo, "maoDeObra" to custoTotal - custo, "custoTotal" to custoTotal,
+            "custoIngredientes" to custo, "gastosIndiretos" to custoIndireto, "indiretos" to ind,
+            "maoDeObra" to maoDeObra, "custoTotal" to custoTotal,
             "lucro" to preco - custoTotal, "precoVenda" to preco,
             "margemSobrePreco" to if (preco > 0) (preco - custoTotal) / preco else 0.0,
             "precoPorcao" to preco / rend, "custoPorcao" to custoTotal / rend,

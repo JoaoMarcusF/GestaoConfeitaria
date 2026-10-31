@@ -17,11 +17,20 @@ class Api(pasta: File, nomeDispositivo: String, val plataforma: String) {
     val servidor = ServidorSync(banco, dispositivo, if (plataforma == "android") "celular" else "computador")
     val cliente = ClienteSync(banco, dispositivo, if (plataforma == "android") "celular" else "computador")
 
-    private val colecoes = setOf("notas", "insumos", "receitas", "vendas", "config")
+    private val colecoes = setOf("notas", "insumos", "receitas", "vendas", "config", "equipamentos", "gastosIndiretos", "sitesPreco")
 
     init {
         banco.criarSeAusente("config", "geral", obj("nomeNegocio" to "", "categorias" to Categorias.padrao,
-            "categoriasExcluidas" to listOf(Categorias.PESSOAL)))
+            "categoriasExcluidas" to listOf(Categorias.PESSOAL), "versaoCategorias" to 2))
+        banco.criarSeAusente("config", "tarifas", obj("botijaoKg" to 13.0, "categoriasIndiretas" to Indiretos.categoriasPadrao))
+        // Bancos criados antes da categoria de contas: inclui a categoria uma única vez
+        banco.get("config", "geral")?.let { c ->
+            if (c.long("versaoCategorias") < 2) {
+                val cats = c.strs("categorias").toMutableList()
+                if (Categorias.CONTAS !in cats) cats.add(cats.indexOf("Entregas").takeIf { it >= 0 } ?: cats.size, Categorias.CONTAS)
+                banco.salvar("config", LinkedHashMap(c).apply { this["categorias"] = cats; this["versaoCategorias"] = 2L }, "geral")
+            }
+        }
     }
 
     fun chamar(metodo: String, a: Obj): Any? = when (metodo) {
@@ -32,6 +41,9 @@ class Api(pasta: File, nomeDispositivo: String, val plataforma: String) {
             "notas" to banco.todos("notas").sortedByDescending { it.str("emissao") },
             "vendas" to banco.todos("vendas").sortedByDescending { it.str("data") },
             "receitas" to custos.receitas(), "insumos" to custos.insumos(),
+            "equipamentos" to custos.indiretos.equipamentos(), "gastosIndiretos" to custos.indiretos.modelos(),
+            "tarifas" to custos.indiretos.tarifas(),
+            "sitesPreco" to banco.todos("sitesPreco"),
             "config" to banco.get("config", "geral"), "versao" to banco.seqAtual())
         "salvar" -> salvar(a.str("col"), a.obj("rec") ?: throw IllegalArgumentException("Faltou o registro."))
         "excluir" -> { checarCol(a.str("col")); banco.excluir(a.str("col"), a.str("id")); true }
@@ -43,11 +55,24 @@ class Api(pasta: File, nomeDispositivo: String, val plataforma: String) {
         "detectarUnidade" -> Unidades.detectar(a.str("descricao"), a.str("unidade"), a.num("quantidade", 1.0))
             ?.let { obj("valor" to it.porUnidade.valor, "base" to it.porUnidade.base, "fonte" to it.fonte) }
         "unidades" -> Unidades.unidadesReceita.keys.toList()
+        "calcularIndiretos" -> custos.indiretos.calcular(a.lista("itens"))
+        "custoEquipamento" -> custos.indiretos.custoHora(a.obj("equipamento") ?: emptyMap(), a.obj("tarifas") ?: custos.indiretos.tarifas())
+            .let { (v, aviso) -> obj("custoHora" to v, "aviso" to aviso) }
         "chaveInfo" -> {
             val ch = ChaveAcesso.extrair(a.str("chave")) ?: throw IllegalArgumentException("A chave de acesso tem 44 dígitos.")
             ChaveAcesso.info(ch).also { it["existe"] = banco.get("notas", ch) != null }
         }
         "buscarPagina" -> Pagina.buscar(a.str("url"))
+        // Pesquisar preço: só baixa páginas dos sites que o usuário cadastrou
+        "buscarSite" -> Pagina.baixar(a.str("url"), ::siteCadastrado,
+            "Este endereço não é de um site cadastrado em Pesquisar preço.", "O site")
+        "medidas" -> a.lista("itens").map { i ->
+            val c = Unidades.detectar(i.str("nome"), "UN", 1.0)?.porUnidade
+            val preco = i.numOuNull("preco")
+            if (c == null || c.valor <= 0 || preco == null) null
+            else obj("valor" to c.valor, "base" to c.base, "unidadeExib" to Unidades.nomeBase(c.base),
+                "precoExib" to preco / c.valor * Unidades.fatorExibicao(c.base))
+        }
         "importarSefaz" -> importar(Importadores.deSefaz(a.obj("dados") ?: emptyMap(), a.str("url"), a.str("chave").ifEmpty { null }))
         "importarXml" -> importar(Importadores.deXml(a.str("xml")))
         "importarPlanilha" -> {
@@ -76,6 +101,15 @@ class Api(pasta: File, nomeDispositivo: String, val plataforma: String) {
         else -> throw IllegalArgumentException("Método desconhecido: $metodo")
     }
 
+    /** O host pertence a um site cadastrado em Pesquisar preço (mesmo domínio, qualquer subdomínio)? */
+    fun siteCadastrado(host: String?): Boolean {
+        if (!Pagina.hostPublico(host)) return false
+        val base = Pagina.dominioBase(host!!)
+        return banco.todos("sitesPreco").any { s ->
+            runCatching { Pagina.dominioBase(java.net.URL(s.str("url")).host) == base }.getOrDefault(false)
+        }
+    }
+
     fun excel(filtro: Obj): ByteArray = ByteArrayOutputStream().also { Relatorio(banco, custos, painel).gerar(filtro, it) }.toByteArray()
 
     private fun checarCol(c: String) { if (c !in colecoes) throw IllegalArgumentException("Coleção inválida: $c") }
@@ -98,7 +132,8 @@ class Api(pasta: File, nomeDispositivo: String, val plataforma: String) {
                 if (r["valorTotal"] == null) r["valorTotal"] = itens.sumOf { it.numOuNull("valorAjustado") ?: it.num("valorTotal") }
             }
             "vendas" -> if (r["valorTotal"] == null) r["valorTotal"] = r.num("quantidade", 1.0) * r.num("valorUnitario")
-            "config" -> r["id"] = "geral"
+            "config" -> if (r.str("id") != "tarifas") r["id"] = "geral"
+            "equipamentos" -> if (r.str("categoria").isEmpty()) r["categoria"] = Indiretos.categoriaDaFonte(r.str("fonte"))
         }
         return banco.salvar(col, r)
     }

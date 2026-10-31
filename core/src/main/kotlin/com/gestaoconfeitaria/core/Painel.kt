@@ -18,12 +18,14 @@ object Formato {
 /** Categorias padrão e sugestão automática a partir da descrição do item. */
 object Categorias {
     const val PESSOAL = "Pessoal (fora do negócio)"
-    val padrao = listOf("Insumos", "Embalagens e decoração", "Utensílios e equipamentos", "Entregas", "Marketing",
+    const val CONTAS = "Contas (luz, gás, água)"
+    val padrao = listOf("Insumos", "Embalagens e decoração", "Utensílios e equipamentos", CONTAS, "Entregas", "Marketing",
         "Cursos", "Outros", PESSOAL)
     private val regras = listOf(
         "Embalagens e decoração" to Regex("\\b(CAIXA|CX|FORMINHA|FORM\\.|SACO|SACOLA|EMBALAG|FITA|ETIQUETA|BANDEJA|POTE|VELA|TOPO|LACO|FECHO|BLISTER|CESTINHA|GUARDANAPO|PAPEL|ADESIV|ACETATO|CAKEB|SAQUINHO)"),
         "Utensílios e equipamentos" to Regex("\\b(FORMA|ESPATULA|BATEDOR|FRIGIDEIRA|BICO|PANELA|ASSADEIRA|TABUA|RASPADOR|COLHER S|REGADOR|TACA|CANECA|ESTENCIL|MOLDE|BALANCA|FOUET|PENEIRA)"),
         "Entregas" to Regex("\\b(UBER|ENTREGA|FRETE|MOTOBOY|99 ?POP|LALAMOVE)"),
+        CONTAS to Regex("\\b(CONTA DE (LUZ|AGUA|GAS)|ENERGIA ELETRICA|BOTIJAO|GAS GLP|GLP P13|NATURGY|CEG RIO|LIGHT SERV|ENEL|CEDAE|AGUAS DO RIO)"),
         "Marketing" to Regex("\\b(ANUNCIO|IMPRESS|PROPAGANDA|CARTAO VISITA|PANFLETO|INSTAGRAM|GRAFICA)"),
         "Cursos" to Regex("\\b(CURSO|AULA|WORKSHOP|MENTORIA)"),
     )
@@ -111,6 +113,7 @@ class Painel(private val banco: Banco, private val custos: Custos) {
         val kpis = obj(
             "gastoTotal" to gastoTotal, "gastoAnterior" to gastoAnterior,
             "faturamento" to faturamento, "faturamentoAnterior" to fatAnterior,
+            "resultadoAnterior" to fatAnterior - gastoAnterior, "temAnterior" to (gastoAnterior > 0 || fatAnterior > 0),
             "resultado" to faturamento - gastoTotal,
             "margem" to if (faturamento > 0) (faturamento - gastoTotal) / faturamento else null,
             "cmv" to if (faturamento > 0) gastoInsumos / faturamento else null,
@@ -160,7 +163,8 @@ class Painel(private val banco: Banco, private val custos: Custos) {
             "periodo" to "${Formato.mes(de)} a ${Formato.mes(ate)}",
             "linhas" to noPeriodo.size,
             "kpis" to kpis,
-            "serie" to meses.map { obj("mes" to it, "rotulo" to Formato.mes(it), "gastos" to gastoMes[it], "vendas" to vendaMes[it]) },
+            "serie" to meses.map { obj("mes" to it, "rotulo" to Formato.mes(it), "gastos" to gastoMes[it], "vendas" to vendaMes[it],
+                "lucro" to (vendaMes[it] ?: 0.0) - (gastoMes[it] ?: 0.0)) },
             "fornecedores" to fornecedores.take(8), "pagamentos" to pagamentos, "categorias" to categorias,
             "produtos" to produtos.take(10), "insumosEmAlta" to insumosEmAlta,
             "descobertas" to d, "qualidade" to qualidade,
